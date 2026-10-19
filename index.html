@@ -1,1 +1,242 @@
-ciao
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Simulatore ATM Bancomat</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            background-color: #f4f4f9; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .atm-container { 
+            background-color: #2c3e50; 
+            color: white; 
+            padding: 25px; 
+            border-radius: 15px; 
+            width: 420px; 
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+        .screen { 
+            background-color: #3498db; 
+            padding: 20px; 
+            border-radius: 8px; 
+        }
+        label {
+            font-weight: bold;
+            display: block;
+            margin-top: 12px;
+            margin-bottom: 5px;
+        }
+        input[type="password"], input[type="number"], select { 
+            width: 100%; 
+            padding: 10px; 
+            box-sizing: border-box; 
+            border-radius: 5px;
+            border: none;
+            font-size: 16px;
+        }
+        .radio-group {
+            background-color: #2980b9;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 8px;
+        }
+        .radio-option {
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            font-size: 15px;
+        }
+        .radio-option input {
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        button { 
+            width: 100%;
+            background-color: #2ecc71; 
+            color: white; 
+            padding: 12px;
+            margin-top: 20px;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 16px;
+        }
+        button:hover { 
+            background-color: #27ae60; 
+        }
+        pre { 
+            background: #ecf0f1; 
+            color: #333; 
+            padding: 10px; 
+            border-radius: 5px; 
+            overflow-x: auto; 
+            margin-top: 15px;
+            max-height: 180px;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="atm-container">
+        <div class="screen">
+            <h2>Sportello ATM Bancomat</h2>
+            
+            <!-- Campo PIN -->
+            <label for="pinInput">PIN Sicurezza (minimo 4 cifre):</label>
+            <input type="password" id="pinInput" placeholder="Inserisci il tuo PIN" maxlength="5">
+
+            <!-- Selezione Operazione -->
+            <label for="operationSelect">Tipo Operazione:</label>
+            <select id="operationSelect" onchange="gestisciOperazione()">
+                <option value="PRELIEVO">Prelievo</option>
+                <option value="DEPOSITO">Deposito</option>
+                <option value="SALDO">Visualizza Saldo</option>
+            </select>
+
+            <!-- Sezione Importo (visibile per Prelievo e Deposito) -->
+            <div id="sectionAmount">
+                <label>Seleziona l'Importo (€):</label>
+                <div class="radio-group">
+                    <div class="radio-option">
+                        <input type="radio" id="r50" name="importoRadio" value="50" checked onclick="gestisciSelezioneImporto()">
+                        <label for="r50">50 €</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" id="r100" name="importoRadio" value="100" onclick="gestisciSelezioneImporto()">
+                        <label for="r100">100 €</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" id="r200" name="importoRadio" value="200" onclick="gestisciSelezioneImporto()">
+                        <label for="r200">200 €</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" id="rCustom" name="importoRadio" value="custom" onclick="gestisciSelezioneImporto()">
+                        <label for="rCustom">Altro importo (libero)</label>
+                    </div>
+                </div>
+
+                <label for="customAmount" style="margin-top: 10px;">Importo personalizzato:</label>
+                <input type="number" id="customAmount" placeholder="Es. 70" disabled min="10">
+            </div>
+
+            <!-- Bottone di invio -->
+            <button onclick="eseguiOperazione()">Conferma Operazione</button>
+        </div>
+
+        <!-- Area di visualizzazione dell'XML generato -->
+        <div id="xmlContainer" class="hidden">
+            <h3>XML Generato per TIBCO:</h3>
+            <pre id="xmlOutput"></pre>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Nasconde la sezione dell'importo se si seleziona "Visualizza Saldo"
+         */
+        function gestisciOperazione() {
+            const op = document.getElementById('operationSelect').value;
+            const amountSection = document.getElementById('sectionAmount');
+            
+            if (op === 'SALDO') {
+                amountSection.classList.add('hidden');
+            } else {
+                amountSection.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Abilita o disabilita il campo di testo per l'importo libero
+         */
+        function gestisciSelezioneImporto() {
+            const isCustom = document.getElementById('rCustom').checked;
+            const customInput = document.getElementById('customAmount');
+            
+            if (isCustom) {
+                customInput.disabled = false;
+                customInput.focus();
+            } else {
+                customInput.disabled = true;
+                customInput.value = '';
+            }
+        }
+
+        /**
+         * Legge i dati inseriti, mostra i messaggi e crea l'XML
+         */
+        function eseguiOperazione() {
+            const pin = document.getElementById('pinInput').value.trim();
+            const operation = document.getElementById('operationSelect').value;
+
+            // 1. Validazione PIN
+            if (pin.length < 4) {
+                alert("Errore: Il PIN deve essere di almeno 4 cifre!");
+                return;
+            }
+
+            let amount = 0;
+
+            // 2. Lettura importo per Prelievo o Deposito
+            if (operation !== 'SALDO') {
+                const radioSelected = document.querySelector('input[name="importoRadio"]:checked').value;
+                if (radioSelected === 'custom') {
+                    amount = parseFloat(document.getElementById('customAmount').value);
+                    if (isNaN(amount) || amount <= 0) {
+                        alert("Errore: Inserisci un importo valido!");
+                        return;
+                    }
+                } else {
+                    amount = parseFloat(radioSelected);
+                }
+            }
+
+            // 3. Notifica all'utente
+            if (operation === 'PRELIEVO') {
+                alert("Prelevare il denaro entro 30 secondi");
+            } else if (operation === 'DEPOSITO') {
+                alert("Operazione di deposito avviata");
+            } else if (operation === 'SALDO') {
+                alert("Richiesta saldo inviata");
+            }
+
+            // 4. Costruzione della stringa XML
+            const timestamp = new Date().toISOString();
+            const xmlString = `<?xml version="1.0" encoding="UTF-8"?>
+<Transaction>
+    <Pin>${pin}</Pin>
+    <OperationType>${operation}</OperationType>
+    <Amount>${amount.toFixed(2)}</Amount>
+    <Timestamp>${timestamp}</Timestamp>
+</Transaction>`;
+
+            // Mostra l'XML a schermo
+            document.getElementById('xmlOutput').textContent = xmlString;
+            document.getElementById('xmlContainer').classList.remove('hidden');
+
+            // Avvia il download del file XML
+            downloadXML(xmlString, `transazione_${operation.toLowerCase()}_${pin}.xml`);
+        }
+
+        /**
+         * Funzione di supporto per scaricare il file XML
+         */
+        function downloadXML(content, fileName) {
+            const blob = new Blob([content], { type: 'application/xml' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = fileName;
+            link.click();
+        }
+    </script>
+</body>
+</html>
