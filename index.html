@@ -83,6 +83,12 @@
         .hidden {
             display: none;
         }
+        .error-text {
+            color: #ff3860;
+            font-weight: bold;
+            margin-top: 5px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -94,6 +100,7 @@
             <!-- Campo PIN -->
             <label for="pinInput">PIN Sicurezza (minimo 4 cifre):</label>
             <input type="password" id="pinInput" placeholder="Inserisci il tuo PIN" maxlength="5">
+            <div id="pinError" class="error-text">Inserire un PIN valido di almeno 4 cifre!</div>
 
             <!-- Selezione Operazione -->
             <label for="operationSelect">Tipo Operazione:</label>
@@ -103,7 +110,7 @@
                 <option value="SALDO">Visualizza Saldo</option>
             </select>
 
-            <!-- Sezione Importo (visibile per Prelievo e Deposito) -->
+            <!-- Sezione Importo -->
             <div id="sectionAmount">
                 <label>Seleziona l'Importo (€):</label>
                 <div class="radio-group">
@@ -127,6 +134,7 @@
 
                 <label for="customAmount" style="margin-top: 10px;">Importo personalizzato:</label>
                 <input type="number" id="customAmount" placeholder="Es. 70" disabled min="10">
+                <div id="amountError" class="error-text">Inserire un importo valido!</div>
             </div>
 
             <!-- Bottone di invio -->
@@ -135,7 +143,7 @@
 
         <!-- Area di visualizzazione dell'XML generato -->
         <div id="xmlContainer" class="hidden">
-            <h3>XML Generato per TIBCO:</h3>
+            <h3>XML Generato e Scaricato:</h3>
             <pre id="xmlOutput"></pre>
         </div>
     </div>
@@ -156,7 +164,7 @@
         }
 
         /**
-         * Abilita o disabilita il campo di testo per l'importo libero
+         * Abilita o disabilita il campo dell'importo libero
          */
         function gestisciSelezioneImporto() {
             const isCustom = document.getElementById('rCustom').checked;
@@ -172,27 +180,33 @@
         }
 
         /**
-         * Legge i dati inseriti, mostra i messaggi e crea l'XML
+         * Genera l'XML e avvia il download silenzioso
          */
         function eseguiOperazione() {
             const pin = document.getElementById('pinInput').value.trim();
             const operation = document.getElementById('operationSelect').value;
+            const pinError = document.getElementById('pinError');
+            const amountError = document.getElementById('amountError');
 
-            // 1. Validazione PIN
+            // Reset messaggi di errore visuali
+            pinError.style.display = 'none';
+            amountError.style.display = 'none';
+
+            // Validazione PIN
             if (pin.length < 4) {
-                alert("Errore: Il PIN deve essere di almeno 4 cifre!");
+                pinError.style.display = 'block';
                 return;
             }
 
             let amount = 0;
 
-            // 2. Lettura importo per Prelievo o Deposito
+            // Validazione Importo
             if (operation !== 'SALDO') {
                 const radioSelected = document.querySelector('input[name="importoRadio"]:checked').value;
                 if (radioSelected === 'custom') {
                     amount = parseFloat(document.getElementById('customAmount').value);
                     if (isNaN(amount) || amount <= 0) {
-                        alert("Errore: Inserisci un importo valido!");
+                        amountError.style.display = 'block';
                         return;
                     }
                 } else {
@@ -200,16 +214,7 @@
                 }
             }
 
-            // 3. Notifica all'utente
-            if (operation === 'PRELIEVO') {
-                alert("Prelevare il denaro entro 30 secondi");
-            } else if (operation === 'DEPOSITO') {
-                alert("Operazione di deposito avviata");
-            } else if (operation === 'SALDO') {
-                alert("Richiesta saldo inviata");
-            }
-
-            // 4. Costruzione della stringa XML
+            // Costruzione della stringa XML
             const timestamp = new Date().toISOString();
             const xmlString = `<?xml version="1.0" encoding="UTF-8"?>
 <Transaction>
@@ -219,23 +224,34 @@
     <Timestamp>${timestamp}</Timestamp>
 </Transaction>`;
 
-            // Mostra l'XML a schermo
+            // Mostra l'XML nella pagina
             document.getElementById('xmlOutput').textContent = xmlString;
             document.getElementById('xmlContainer').classList.remove('hidden');
 
-            // Avvia il download del file XML
-            downloadXML(xmlString, `transazione_${operation.toLowerCase()}_${pin}.xml`);
+            // DOWNLOAD AUTOMATICO SILENZIOSO
+            const nomeFile = `transazione_${operation.toLowerCase()}_${pin}.xml`;
+            downloadXMLAutomatico(xmlString, nomeFile);
         }
 
         /**
-         * Funzione di supporto per scaricare il file XML
+         * Effettua il download automatico del file senza avvisi o popup
          */
-        function downloadXML(content, fileName) {
-            const blob = new Blob([content], { type: 'application/xml' });
+        function downloadXMLAutomatico(contenuto, nomeFile) {
+            // Un Blob rappresenta i dati in formato file
+            const blob = new Blob([contenuto], { type: 'application/xml' });
+            
+            // Creiamo un elemento <a> invisibile
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = fileName;
+            link.download = nomeFile;
+            
+            // Aggiungiamo temporaneamente il link al documento ed eseguiamo il click
+            document.body.appendChild(link);
             link.click();
+            
+            // Rimuoviamo il link pulendo la memoria
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
         }
     </script>
 </body>
