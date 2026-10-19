@@ -1,74 +1,88 @@
-# Documentazione di Progetto: Simulatore ATM e Integrazione
+# Documentazione Progetto: ATM Bancomat su TIBCO BW 6
 
 **Autore:** [Il tuo nome]
 **Data:** [Data di oggi]
 
 ---
 
-## PARTE 1: BUR - Business Requirements
+## 1. BUR (Business Requirements)
 
-### 1. Obiettivo del Progetto
-L'obiettivo è creare un simulatore web di uno sportello Bancomat (ATM) che permetta agli utenti di simulare operazioni bancarie (prelievo, versamento, saldo). Le informazioni di queste operazioni dovranno essere salvate in un formato standard per permettere a un sistema centrale di effettuare controlli di sicurezza e validità.
+**Richieste del business al tecnico**
 
-### 2. Requisiti di Business
-* L'utente deve poter inserire il proprio numero di carta.
-* L'utente deve poter scegliere l'operazione da effettuare.
-* L'utente deve poter specificare un importo.
-* Il sistema deve registrare l'ora esatta dell'operazione.
-* I dati generati devono essere controllati in modo automatico per prevenire frodi o errori.
+Il cliente richiede la realizzazione di un'interfaccia software per uno sportello ATM. Il sistema deve gestire esclusivamente la funzione di **prelievo**. 
 
----
+Per l'autenticazione, il sistema non utilizzerà il numero di carta, ma dovrà riconoscere il cliente tramite l'inserimento dei seguenti dati anagrafici:
+* Nome
+* Cognome
+* PIN univoco di 5 cifre
 
-## PARTE 2: FUD - Analisi Funzionale
+Per quanto riguarda l'operatività, l'ATM deve permettere all'utente di selezionare l'importo da prelevare (verificando idealmente la compatibilità con il saldo). La selezione dell'importo deve avvenire tramite dei radio button per i tagli standard (50€, 100€, 200€) e prevedere anche un campo di testo per l'inserimento di un importo libero.
 
-### 1. Descrizione del Flusso (Use Case)
-1. L'utente accede all'interfaccia web dell'ATM.
-2. Compila i campi: Numero Carta, Tipo Operazione, Importo.
-3. Preme il tasto "Conferma".
-4. Il sistema "Front-end" raccoglie i dati e genera un file formattato (XML).
-5. Il file XML viene inviato a un database centrale.
-6. Un sistema di integrazione (TIBCO) legge periodicamente i nuovi record dal database per effettuare i controlli.
-
-### 2. Mappatura dei Dati
-Il file XML in uscita dovrà contenere i seguenti campi obbligatori:
-* **CardNumber:** Alfanumerico, identifica il cliente.
-* **OperationType:** Lista di valori chiusa (PRELIEVO, VERSAMENTO, SALDO).
-* **Amount:** Valore numerico (con possibili decimali).
-* **Timestamp:** Data e ora dell'operazione in formato standard ISO.
-
-### 3. Regole e Controlli (Requisiti per TIBCO)
-Il sistema di controllo (TIBCO) dovrà verificare che:
-* Il campo *Amount* sia maggiore di zero (tranne che per l'operazione SALDO).
-* Il *CardNumber* non sia vuoto o nullo.
+Al termine dell'operazione, all'invio della richiesta, il sistema deve mostrare un popup di avviso con il messaggio esatto: *"prelevare il denaro entro 30 secondi"*.
+L'applicativo deve essere sviluppato come pagina HTML. Tramite uno script JavaScript, i dati inseriti devono essere formattati in un record XML e salvati fisicamente come file all'interno di una cartella di appoggio.
 
 ---
 
-## PARTE 3: TAD - Analisi Tecnica
+## 2. FUD (Analisi Funzionale)
 
-### 1. Architettura di Sistema
-Il sistema è diviso in tre livelli principali:
-* **Front-end (Client):** Applicazione Web scritta in HTML5, CSS3 e JavaScript (Vanilla). Raccoglie l'input dell'utente e genera il payload XML.
-* **Storage (Database):** PostgreSQL. Verrà creata una tabella dedicata per ospitare l'XML generato.
-* **Middleware / Orchestration:** TIBCO. Effettuerà un *polling* (lettura ciclica) sul database PostgreSQL per prelevare i nuovi file XML e processare le regole di business definite nel FUD.
+**Analisi e comprensione dei requisiti**
 
-### 2. Struttura del Database (PostgreSQL)
-Nome Tabella prevista: `atm_transactions`
-* `id`: SERIAL PRIMARY KEY
-* `xml_payload`: XML (contiene l'intero file generato dall'interfaccia)
-* `status`: VARCHAR(20) (Default 'NEW' - verrà aggiornato da TIBCO in 'PROCESSED' o 'ERROR')
-* `created_at`: TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+Sulla base delle richieste del cliente, il sistema prevederà un'unica schermata (front-end) in cui l'utente inserirà i dati necessari per completare la transazione di prelievo.
 
-### 3. Struttura del Tracciato Record (XML Schema)
-L'output generato dalla funzione JavaScript `generateXML()` rispetta la seguente struttura:
+**Flusso operativo (Use Case principale):**
+1. L'utente visualizza la maschera dell'ATM.
+2. L'utente compila i campi di riconoscimento: `Nome`, `Cognome`, `PIN` (quest'ultimo deve accettare solo 5 caratteri numerici).
+3. L'utente seleziona l'importo desiderato scegliendo tra le opzioni predefinite (radio buttons: 50, 100, 200) oppure inserendo un valore numerico nel campo libero.
+4. L'utente preme il pulsante di conferma prelievo.
+5. Il sistema mostra immediatamente il popup alert: *"prelevare il denaro entro 30 secondi"*.
+6. Contestualmente, il sistema genera un file XML contenente i dati della transazione e lo deposita in una directory specifica, da cui poi TIBCO BW 6 andrà a prelevarlo per le elaborazioni successive.
+
+**Tracciato Dati Previsto:**
+* `Nome`: Stringa di testo.
+* `Cognome`: Stringa di testo.
+* `PIN`: Numerico (esattamente 5 cifre).
+* `Importo`: Valore numerico intero.
+
+---
+
+## 3. TAD (Analisi Tecnica)
+
+**Dettagli implementativi per gli sviluppatori**
+
+Il progetto è composto da un'interfaccia client-side e da un flusso di integrazione gestito tramite middleware.
+
+**Stack Tecnologico Frontend:**
+* **HTML5 / CSS:** Per la strutturazione e la formattazione della pagina (form di input, radio buttons, campi text/number).
+* **JavaScript (Vanilla):** Gestisce la logica del form. Si occupa di validare la lunghezza del PIN (5 cifre), capire se l'utente ha usato un radio button o il campo libero, mostrare il `window.alert()` richiesto e generare il file XML. Per il salvataggio del file su cartella, JavaScript sfrutterà le API del browser (oggetto `Blob` e URL dinamico) forzando il download del file `.xml` nella cartella di default, simulando così la scrittura su filesystem.
+
+**Middleware (TIBCO BW 6):**
+Il processo di TIBCO BusinessWorks 6 verrà configurato con un componente di tipo *File Poller*. Questo ricevitore monitorerà la cartella di destinazione dei file generati dall'HTML. Non appena rileverà la presenza di un nuovo file XML, lo prenderà in carico, ne effettuerà il parsing e applicherà la logica di business (es. validazione pin, verifica capienza saldo simulata, instradamento verso altri sistemi).
+
+**Struttura XML Generata (Esempio):**
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<Transaction>
-    <CardNumber>String</CardNumber>
-    <OperationType>String</OperationType>
-    <Amount>Decimal</Amount>
-    <Timestamp>DateTime</Timestamp>
-</Transaction>
+<RichiestaPrelievo>
+    <Cliente>
+        <Nome>Mario</Nome>
+        <Cognome>Rossi</Cognome>
+        <PIN>12345</PIN>
+    </Cliente>
+    <DatiOperazione>
+        <Tipo>PRELIEVO</Tipo>
+        <Importo>100</Importo>
+    </DatiOperazione>
+</RichiestaPrelievo>
 ```
 
-### 4. Dettagli di Implementazione (Attuale)
-Il salvataggio del file attualmente avviene in locale simulando l'export tramite un oggetto `Blob` in JavaScript. Nelle fasi successive, il download locale sarà sostituito da una chiamata di rete (es. API REST) per l'inserimento diretto nel database PostgreSQL.
+---
+
+## 4. Casi di Test
+
+*Di seguito l'estratto dei casi di test (integrato dal foglio Excel di collaudo).*
+
+| ID Test | Descrizione Scenario | Input Inserito | Risultato Atteso | Esito |
+| :--- | :--- | :--- | :--- | :--- |
+| **TC_01** | Prelievo standard importo fisso | Nome: Mario, Cognome: Rossi, PIN: 12345, Importo: [Radio 50] | Popup 30 sec + Download file XML con importo 50 | |
+| **TC_02** | Prelievo con importo libero | Nome: Luigi, Cognome: Verdi, PIN: 99887, Importo: [Libero 150] | Popup 30 sec + Download file XML con importo 150 | |
+| **TC_03** | Validazione PIN errato (meno di 5 cifre) | Nome: A., Cognome: B., PIN: 123 | Il sistema blocca l'invio e chiede un PIN di 5 cifre | |
+| **TC_04** | Validazione formato XML | Esecuzione di TC_01 | Il file salvato deve rispettare la struttura concordata nel TAD | |
