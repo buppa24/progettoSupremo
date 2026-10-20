@@ -89,6 +89,29 @@
             margin-top: 5px;
             display: none;
         }
+
+        /* Nuovi stili CSS per il Banner dell'Esito Transazione */
+        .notification-banner {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .status-loading {
+            background-color: #f39c12;
+            color: white;
+        }
+        .status-success {
+            background-color: #27ae60;
+            color: white;
+        }
+        .status-failed {
+            background-color: #e74c3c;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -97,10 +120,10 @@
         <div class="screen">
             <h2>Sportello ATM Bancomat</h2>
             
-            <!-- Campo PIN -->
-            <label for="pinInput">PIN Sicurezza (minimo 4 cifre):</label>
-            <input type="password" id="pinInput" placeholder="Inserisci il tuo PIN" maxlength="5">
-            <div id="pinError" class="error-text">Inserire un PIN valido di almeno 4 cifre!</div>
+            <!-- Campo PIN aggiornato: maxlength a 4 e blocco lettere -->
+            <label for="pinInput">PIN Sicurezza (esattamente 4 cifre):</label>
+            <input type="password" id="pinInput" placeholder="Inserisci PIN (4 cifre)" maxlength="4" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+            <div id="pinError" class="error-text">Inserire un PIN valido di 4 cifre!</div>
 
             <!-- Selezione Operazione -->
             <label for="operationSelect">Tipo Operazione:</label>
@@ -137,8 +160,11 @@
                 <div id="amountError" class="error-text">Inserire un importo valido!</div>
             </div>
 
-            <!-- Bottone di invio -->
-            <button onclick="eseguiOperazione()">Conferma Operazione</button>
+            <!-- Bottone di invio aggiornato per bloccare il refresh -->
+            <button type="button" onclick="eseguiOperazione(event)">Conferma Operazione</button>
+
+            <!-- Banner dinamico per mostrare l'esito restituito da TIBCO -->
+            <div id="notificationBanner" class="notification-banner hidden"></div>
         </div>
 
         <!-- Area di visualizzazione dell'XML generato -->
@@ -148,75 +174,68 @@
         </div>
     </div>
 
-    <script>
-        /**
-         * Nasconde la sezione dell'importo se si seleziona "Visualizza Saldo"
-         */
-        function gestisciOperazione() {
-            const op = document.getElementById('operationSelect').value;
-            const amountSection = document.getElementById('sectionAmount');
-            
-            if (op === 'SALDO') {
-                amountSection.classList.add('hidden');
-            } else {
-                amountSection.classList.remove('hidden');
-            }
+<script>
+    let pollingInterval = null;
+
+    function gestisciOperazione() {
+        const op = document.getElementById('operationSelect').value;
+        const amountSection = document.getElementById('sectionAmount');
+        
+        if (op === 'SALDO') {
+            amountSection.classList.add('hidden');
+        } else {
+            amountSection.classList.remove('hidden');
+        }
+    }
+
+    function gestisciSelezioneImporto() {
+        const isCustom = document.getElementById('rCustom').checked;
+        const customInput = document.getElementById('customAmount');
+        
+        if (isCustom) {
+            customInput.disabled = false;
+            customInput.focus();
+        } else {
+            customInput.disabled = true;
+            customInput.value = '';
+        }
+    }
+
+    // Aggiunto l'evento come parametro per gestire il blocco della pagina
+    function eseguiOperazione(event) {
+        if (event) event.preventDefault(); // Blocca il ricaricamento
+
+        const pin = document.getElementById('pinInput').value.trim();
+        const operation = document.getElementById('operationSelect').value;
+        const pinError = document.getElementById('pinError');
+        const amountError = document.getElementById('amountError');
+
+        pinError.style.display = 'none';
+        amountError.style.display = 'none';
+
+        // Validazione rigorosa: il PIN deve essere di 4 cifre esatte
+        if (pin.length !== 4) {
+            pinError.textContent = "Il PIN deve contenere esattamente 4 numeri!";
+            pinError.style.display = 'block';
+            return;
         }
 
-        /**
-         * Abilita o disabilita il campo dell'importo libero
-         */
-        function gestisciSelezioneImporto() {
-            const isCustom = document.getElementById('rCustom').checked;
-            const customInput = document.getElementById('customAmount');
-            
-            if (isCustom) {
-                customInput.disabled = false;
-                customInput.focus();
-            } else {
-                customInput.disabled = true;
-                customInput.value = '';
-            }
-        }
-
-        /**
-         * Genera l'XML e avvia il download silenzioso
-         */
-        function eseguiOperazione() {
-            const pin = document.getElementById('pinInput').value.trim();
-            const operation = document.getElementById('operationSelect').value;
-            const pinError = document.getElementById('pinError');
-            const amountError = document.getElementById('amountError');
-
-            // Reset messaggi di errore visuali
-            pinError.style.display = 'none';
-            amountError.style.display = 'none';
-
-            // Validazione PIN
-            if (pin.length < 4) {
-                pinError.style.display = 'block';
-                return;
-            }
-
-            let amount = 0;
-
-            // Validazione Importo
-            if (operation !== 'SALDO') {
-                const radioSelected = document.querySelector('input[name="importoRadio"]:checked').value;
-                if (radioSelected === 'custom') {
-                    amount = parseFloat(document.getElementById('customAmount').value);
-                    if (isNaN(amount) || amount <= 0) {
-                        amountError.style.display = 'block';
-                        return;
-                    }
-                } else {
-                    amount = parseFloat(radioSelected);
+        let amount = 0;
+        if (operation !== 'SALDO') {
+            const radioSelected = document.querySelector('input[name="importoRadio"]:checked').value;
+            if (radioSelected === 'custom') {
+                amount = parseFloat(document.getElementById('customAmount').value);
+                if (isNaN(amount) || amount <= 0) {
+                    amountError.style.display = 'block';
+                    return;
                 }
+            } else {
+                amount = parseFloat(radioSelected);
             }
+        }
 
-            // Costruzione della stringa XML
-            const timestamp = new Date().toISOString();
-            const xmlString = `<?xml version="1.0" encoding="UTF-8"?>
+        const timestamp = new Date().toISOString();
+        const xmlString = `<?xml version="1.0" encoding="UTF-8"?>
 <Transaction>
     <Pin>${pin}</Pin>
     <OperationType>${operation}</OperationType>
@@ -224,35 +243,71 @@
     <Timestamp>${timestamp}</Timestamp>
 </Transaction>`;
 
-            // Mostra l'XML nella pagina
-            document.getElementById('xmlOutput').textContent = xmlString;
-            document.getElementById('xmlContainer').classList.remove('hidden');
+        document.getElementById('xmlOutput').textContent = xmlString;
+        document.getElementById('xmlContainer').classList.remove('hidden');
 
-            // DOWNLOAD AUTOMATICO SILENZIOSO
-            const nomeFile = `transazione_${operation.toLowerCase()}_${pin}.xml`;
-            downloadXMLAutomatico(xmlString, nomeFile);
-        }
+        const nomeFile = `transazione_${operation.toLowerCase()}_${pin}.xml`;
+        downloadXMLAutomatico(xmlString, nomeFile);
 
-        /**
-         * Effettua il download automatico del file senza avvisi o popup
-         */
-        function downloadXMLAutomatico(contenuto, nomeFile) {
-            // Un Blob rappresenta i dati in formato file
-            const blob = new Blob([contenuto], { type: 'application/xml' });
-            
-            // Creiamo un elemento <a> invisibile
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = nomeFile;
-            
-            // Aggiungiamo temporaneamente il link al documento ed eseguiamo il click
-            document.body.appendChild(link);
-            link.click();
-            
-            // Rimuoviamo il link pulendo la memoria
-            document.body.removeChild(link);
-            URL.revokeObjectURL(link.href);
+        avviaAttesaEsitoTIBCO();
+    }
+
+    function downloadXMLAutomatico(contenuto, nomeFile) {
+        const blob = new Blob([contenuto], { type: 'application/xml' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = nomeFile;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+    }
+
+    function avviaAttesaEsitoTIBCO() {
+        const banner = document.getElementById('notificationBanner');
+        banner.className = 'notification-banner status-loading';
+        banner.innerHTML = '⏳ Elaborazione TIBCO in corso (Verifica PIN e Saldo)...';
+        banner.classList.remove('hidden');
+
+        if (pollingInterval) clearInterval(pollingInterval);
+        
+        setTimeout(() => {
+            pollingInterval = setInterval(leggiEsitoXML, 1500);
+        }, 1000);
+    }
+
+    async function leggiEsitoXML() {
+        try {
+            const response = await fetch('esito.xml?t=' + new Date().getTime());
+
+            if (!response.ok) return;
+
+            const textData = await response.text();
+            if (!textData || textData.trim() === '') return;
+
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(textData, "text/xml");
+
+            const status = xmlDoc.getElementsByTagName("Status")[0]?.textContent;
+            const message = xmlDoc.getElementsByTagName("Message")[0]?.textContent;
+
+            const banner = document.getElementById('notificationBanner');
+
+            if (status === 'OK') {
+                clearInterval(pollingInterval);
+                banner.className = 'notification-banner status-success';
+                banner.innerHTML = `✅ ${message}`;
+            } else if (status) {
+                // Raccoglie qualsiasi stato diverso da OK (KO, ERRORE, ecc.) per mostrare il messaggio di saldo insufficiente o pin errato
+                clearInterval(pollingInterval);
+                banner.className = 'notification-banner status-failed';
+                banner.innerHTML = `❌ ${message}`;
+            }
+        } catch (err) {
+            console.log("In attesa del nuovo file esito.xml...", err);
         }
-    </script>
+    }
+</script>
 </body>
 </html>
